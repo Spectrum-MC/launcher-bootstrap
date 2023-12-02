@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 type LauncherManager struct {
@@ -65,8 +66,8 @@ func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
 				Sha256:     v.Hash,
 				Size:       v.Size,
 				Executable: false,
-				// @TODO Maybe later, but there should no need to have an executable
-				// Unless we want to support Java in other languages
+				// @TODO Maybe later, but there should need to have an executable flag
+				// Unless we want to support other languages than java
 				// Like go which produces direct executables or python
 				// Maybe really later
 				// This could lead this bootstrap to be more generic
@@ -76,4 +77,29 @@ func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
 	}
 
 	return filesToDownload, nil
+}
+
+func (m *LauncherManager) SubstituteVariables(jrePath string) []string {
+	args := []string{}
+	vars := map[string]string{
+		"${base_path}":     m.bSettings.LauncherPath,
+		"${launcher_path}": filepath.Join(m.bSettings.LauncherPath, "launcher"),
+		"${jre_path}":      jrePath,
+		"${runtime_path}":  filepath.Join(m.bSettings.LauncherPath, "runtime"),
+	}
+
+	for _, str := range m.launcherManifest.Args {
+		if !strings.Contains(str, "${") {
+			args = append(args, str)
+			continue
+		}
+
+		for k, v := range vars {
+			str = strings.ReplaceAll(str, k, v)
+		}
+
+		args = append(args, str)
+	}
+
+	return args
 }
