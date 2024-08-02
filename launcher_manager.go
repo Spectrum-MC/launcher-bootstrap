@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -81,11 +83,15 @@ func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
 
 func (m *LauncherManager) SubstituteVariables(jrePath string) []string {
 	args := []string{}
+
+	bsv, _ := strconv.Atoi(strings.Split(BOOTSTRAP_VERSION, ".")[0])
 	vars := map[string]string{
-		"${base_path}":     m.bSettings.LauncherPath,
-		"${launcher_path}": filepath.Join(m.bSettings.LauncherPath, "launcher"),
-		"${jre_path}":      jrePath,
-		"${runtime_path}":  filepath.Join(m.bSettings.LauncherPath, "runtime"),
+		"${base_path}":      m.bSettings.LauncherPath,
+		"${launcher_path}":  filepath.Join(m.bSettings.LauncherPath, "launcher"),
+		"${jre_path}":       jrePath,
+		"${runtime_path}":   filepath.Join(m.bSettings.LauncherPath, "runtime"),
+		"${bs_version}":     BOOTSTRAP_VERSION,
+		"${int_bs_version}": fmt.Sprintf("%v", bsv),
 	}
 
 	for _, str := range m.launcherManifest.Args {

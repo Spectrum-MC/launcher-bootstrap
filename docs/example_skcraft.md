@@ -25,8 +25,10 @@ The boostrap uses a manifest file which lists everything it needs to know. That'
     ],
     "main_class": "com.skcraft.launcher.FancyLauncher",
     "app_args": [
-        "--path",
-        "${base_path}"
+        "--dir",
+        "${base_path}",
+        "--bootstrap-version",
+        "${int_bs_version}"
     ],
     "jre": {
         "manifest": "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json",
@@ -48,6 +50,8 @@ Here are the available variables to be used in the arguments:
 |launcher_path|The launcher folder in the base_path|
 |jre_path|The path to the used JRE (e.g. simple launcher that uses the same java version)
 |runtime_path|The folder that contains all the installed Java available|
+|bs_version|The bootstrap version|
+|int_bs_version|The bootstrap major version, as an integer, specifically for SKCraft compat|
 
 The result will be a folder on your user's computer with the following structure:
 ```

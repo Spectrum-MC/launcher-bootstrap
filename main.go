@@ -165,6 +165,11 @@ func main() {
 
 		cmdArgs = append(cmdArgs, launcherManager.SubstituteVariables(jvmManager.GetPath())...)
 
+		fmt.Println()
+		fmt.Println("% Launching the launcher with the following command:")
+		fmt.Println(filepath.Join(jvmManager.GetPath(), executablePath) + strings.Join(cmdArgs, " "))
+		fmt.Println()
+
 		cmd := exec.Command(filepath.Join(jvmManager.GetPath(), executablePath), cmdArgs...)
 
 		cmd.Stderr = os.Stderr
