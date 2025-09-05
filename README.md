@@ -122,6 +122,17 @@ See the [fyne-cross repo](https://github.com/fyne-io/fyne-cross) for more info
 
 Your compiled bootstrap, are available in `fyne-cross/bin/` ready to be uploaded to your webhost to distribute to your players.
 
+## Build
+
+Required packages to build (debian):
+- libxxf86vm-dev
+- libxcursor-dev
+- libxrandr-dev
+- libxinerama-dev
+- libxi-dev
+- libgl1-mesa-dev
+- libxrandr-dev
+
 ## ROADMAP
 
 - Retry downloads when failed

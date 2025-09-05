@@ -16,30 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package httpclient
 
 import (
-	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/spectrum-mc/bootstrap/models"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
 
-const NOT_DOWNLOADED = "NOT_DOWNLOADED"
-
-func SetUserAgent(bs *BootstrapSettings, req *http.Request) {
-	req.Header.Set(
-		"User-Agent",
-		bs.Brand+" (SpectrumBootstrap v"+BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
-	)
-}
-
-func GetOrCached[T interface{}](bs *BootstrapSettings, cachePath, url string) (*T, error) {
+func GetOrCached[T interface{}](bs *models.BootstrapSettings, cachePath, url string) (*T, error) {
 	cached, cachedErr := LoadFromCache[T](cachePath)
 	// There is no error for file not found or file corrupted
 	// So if we have an error here, there is a deeper issue and we need to raise
@@ -74,7 +65,32 @@ func GetOrCached[T interface{}](bs *BootstrapSettings, cachePath, url string) (*
 	return live, err
 }
 
-func DoGetRequest[T interface{}](bs *BootstrapSettings, url string) (*T, error) {
+func LoadFromCache[T interface{}](filepath string) (*T, error) {
+	_, err := os.Stat(filepath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	} else if err != nil {
+		return nil, nil
+	}
+
+	out, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	manifest := new(T)
+	err = json.Unmarshal(out, manifest)
+	if err != nil {
+		// If the file is corrupted
+		// We want to download the new one directly
+		fmt.Println(err)
+		return nil, nil
+	}
+
+	return manifest, nil
+}
+
+func DoGetRequest[T any](bs *models.BootstrapSettings, url string) (*T, error) {
 	client := &http.Client{}
 
 	req, err := http.NewRequest(
@@ -103,57 +119,9 @@ func DoGetRequest[T interface{}](bs *BootstrapSettings, url string) (*T, error) 
 	return manifest, nil
 }
 
-func LoadFromCache[T interface{}](filepath string) (*T, error) {
-	_, err := os.Stat(filepath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	} else if err != nil {
-		return nil, nil
-	}
-
-	out, err := os.ReadFile(filepath)
-	if err != nil {
-		return nil, err
-	}
-
-	manifest := new(T)
-	err = json.Unmarshal(out, manifest)
-	if err != nil {
-		// If the file is corrupted
-		// We want to download the new one directly
-		fmt.Println(err)
-		return nil, nil
-	}
-
-	return manifest, nil
-}
-
-func GetHash(filepath string) string {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func GetHashSha1(filepath string) string {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	h := sha1.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil))
+func SetUserAgent(bs *models.BootstrapSettings, req *http.Request) {
+	req.Header.Set(
+		"User-Agent",
+		bs.Brand+" (SpectrumBootstrap v"+utils.BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
+	)
 }

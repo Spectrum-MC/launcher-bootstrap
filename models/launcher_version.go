@@ -1,5 +1,3 @@
-//go:build !linux
-
 /**
  * Spectrum-Bootstrap - A bootstrap for Minecraft launchers
  * Copyright (C) 2023-2024 - Oxodao
@@ -18,29 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package models
 
-import (
-	"os"
-
-	"github.com/kirsle/configdir"
-)
-
-func GetLauncherDirectory(s *BootstrapSettings) (string, error) {
-	lp := s.LauncherPath
-	if len(lp) == 0 {
-		lp = configdir.LocalConfig(s.FolderName)
-	}
-
-	_, err := os.Stat(lp)
-	if err != nil && !os.IsNotExist(err) {
-		return "", err
-	} else if err != nil {
-		err = os.MkdirAll(lp, os.ModePerm)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	return lp, nil
+type LauncherVersion struct {
+	Version string `json:"version"`
+	Hash    string `json:"hash"`
 }

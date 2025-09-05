@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package localize
 
 import (
 	"embed"
@@ -28,10 +28,13 @@ import (
 	"golang.org/x/text/language"
 )
 
-//go:embed lang/locale.*.toml
 var LocalesFS embed.FS
 
 var localizer *i18n.Localizer = nil
+
+func LoadTranslations(fs embed.FS) {
+	LocalesFS = fs
+}
 
 func GetLocalizer() *i18n.Localizer {
 	userLocales, _ := locale.GetLocales()
