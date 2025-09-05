@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package runtime_manager
 
 import (
 	"fmt"
@@ -25,20 +25,23 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+
+	"github.com/spectrum-mc/bootstrap/models"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
 
 type LauncherManager struct {
-	launcherManifest *LauncherManifest
-	bSettings        *BootstrapSettings
+	LauncherManifest *models.LauncherManifest
+	bSettings        *models.BootstrapSettings
 }
 
-func GetLauncherManager(bs *BootstrapSettings) (*LauncherManager, error) {
+func GetLauncherManager(bs *models.BootstrapSettings) (*LauncherManager, error) {
 	launcherManager := &LauncherManager{
 		bSettings: bs,
 	}
 
 	// We load the main manifest
-	mainManifest, err := GetOrCached[LauncherManifest](
+	mainManifest, err := utils.GetOrCached[models.LauncherManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "launcher_manifest.json"),
 		bs.ManifestURL,
@@ -47,7 +50,7 @@ func GetLauncherManager(bs *BootstrapSettings) (*LauncherManager, error) {
 		return nil, err
 	}
 
-	launcherManager.launcherManifest = mainManifest
+	launcherManager.LauncherManifest = mainManifest
 
 	return launcherManager, nil
 }
@@ -57,14 +60,14 @@ func (m *LauncherManager) GetPath() string {
 }
 
 // Returns a list of files to re-download
-func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
+func (m *LauncherManager) ValidateInstallation() ([]models.Downloadable, error) {
 	bp := m.GetPath()
 	os.MkdirAll(bp, os.ModePerm)
 
-	filesToDownload := []Downloadable{}
+	filesToDownload := []models.Downloadable{}
 	fileList := []string{}
 
-	for _, v := range m.launcherManifest.Files {
+	for _, v := range m.LauncherManifest.Files {
 		file := filepath.Join(bp, v.Path)
 		fileList = append(fileList, file)
 
@@ -76,7 +79,7 @@ func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
 		} else if v.Type == "file" || v.Type == "classpath" {
 			_, err := os.Stat(file)
 			if !os.IsNotExist(err) {
-				hash := GetHash(file)
+				hash := utils.GetHash(file)
 				if hash == v.Hash {
 					// The file exists and has the correct hash
 					// No need to redownload
@@ -84,7 +87,7 @@ func (m *LauncherManager) ValidateInstallation() ([]Downloadable, error) {
 				}
 			}
 
-			filesToDownload = append(filesToDownload, Downloadable{
+			filesToDownload = append(filesToDownload, models.Downloadable{
 				Url:        v.Url,
 				Path:       file,
 				Sha256:     v.Hash,

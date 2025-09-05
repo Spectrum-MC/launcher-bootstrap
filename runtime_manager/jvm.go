@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package runtime_manager
 
 import (
 	"errors"
@@ -27,6 +27,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+
+	"github.com/spectrum-mc/bootstrap/models"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
 
 var (
@@ -36,45 +39,47 @@ var (
 )
 
 type JvmManager struct {
-	cachedMainManifest    *MainJavaManifest
-	cachedVersionManifest *JavaManifest
+	cachedMainManifest    *models.MainJavaManifest
+	cachedVersionManifest *models.JavaManifest
 
-	launcherManifest LauncherJavaManifest
-	os               string
-	bSettings        *BootstrapSettings
+	launcherManifest models.LauncherJavaManifest
+	Os               string
+	bSettings        *models.BootstrapSettings
 }
 
-func GetJvmManager(bs *BootstrapSettings, launcherManifest LauncherJavaManifest) (*JvmManager, error) {
+func GetJvmManager(bs *models.BootstrapSettings, launcherManifest models.LauncherJavaManifest) (*JvmManager, error) {
 	//#region Detecting os
 	// runtime.GOARCH = 386 amd64 amd64p32 arm arm64
 	os := runtime.GOOS
 	arch := runtime.GOARCH
-	if os == "linux" {
+	switch os {
+	case "linux":
 		os = "linux"
 		if arch == "386" {
 			os += "-i386"
 		} else if arch != "amd64" && arch != "amd64p32" {
 			return nil, ErrFailedDetermineOs
 		}
-	} else if os == "darwin" {
+	case "darwin":
 		os = "mac-os"
 		if arch == "arm64" {
 			os += "-arm64"
 		} else if arch != "amd64" {
 			return nil, ErrFailedDetermineOs
 		}
-	} else if os == "windows" {
+	case "windows":
 		os = "windows"
-		if arch == "386" {
+		switch arch {
+		case "386":
 			os += "-x86"
-		} else if arch == "amd64" || arch == "amd64p32" {
+		case "amd64", "amd64p32":
 			os += "-x64"
-		} else if arch == "arm64" {
+		case "arm64":
 			os += "-arm64"
-		} else {
+		default:
 			return nil, ErrFailedDetermineOs
 		}
-	} else {
+	default:
 		return nil, ErrFailedDetermineOs
 	}
 	//#endregion
@@ -82,11 +87,11 @@ func GetJvmManager(bs *BootstrapSettings, launcherManifest LauncherJavaManifest)
 	jvmManager := &JvmManager{
 		launcherManifest: launcherManifest,
 		bSettings:        bs,
-		os:               os,
+		Os:               os,
 	}
 
 	// We load the main manifest
-	mainManifest, err := GetOrCached[MainJavaManifest](
+	mainManifest, err := utils.GetOrCached[models.MainJavaManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "main_java_manifest.json"),
 		launcherManifest.ManifestURL,
@@ -107,7 +112,7 @@ func GetJvmManager(bs *BootstrapSettings, launcherManifest LauncherJavaManifest)
 	if !ok {
 		return nil, ErrNoJavaVersionForOs
 	}
-	versionManifest, err := GetOrCached[JavaManifest](
+	versionManifest, err := utils.GetOrCached[models.JavaManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "java_"+os+"_"+launcherManifest.Component+".json"),
 		version[0].Manifest.Url, // @TODO: Check how versions are handled, should we DL the first or the last?
@@ -122,14 +127,14 @@ func GetJvmManager(bs *BootstrapSettings, launcherManifest LauncherJavaManifest)
 }
 
 func (m *JvmManager) GetPath() string {
-	return path.Join(m.bSettings.LauncherPath, "runtime", m.launcherManifest.Component, m.os)
+	return path.Join(m.bSettings.LauncherPath, "runtime", m.launcherManifest.Component, m.Os)
 }
 
 // Returns a list of files to re-download
-func (m *JvmManager) ValidateInstallation() ([]Downloadable, error) {
+func (m *JvmManager) ValidateInstallation() ([]models.Downloadable, error) {
 	bp := m.GetPath()
 
-	filesToDownload := []Downloadable{}
+	filesToDownload := []models.Downloadable{}
 	fileList := []string{}
 
 	for k, v := range m.cachedVersionManifest.Files {
@@ -144,7 +149,7 @@ func (m *JvmManager) ValidateInstallation() ([]Downloadable, error) {
 		} else if v.Type == "file" {
 			_, err := os.Stat(file)
 			if !os.IsNotExist(err) {
-				sha1 := GetHashSha1(file)
+				sha1 := utils.GetHashSha1(file)
 				if sha1 == v.Downloads.Raw.Hash {
 					// The file exists and has the correct hash
 					// No need to redownload
@@ -160,7 +165,7 @@ func (m *JvmManager) ValidateInstallation() ([]Downloadable, error) {
 				}
 			}
 
-			filesToDownload = append(filesToDownload, Downloadable{
+			filesToDownload = append(filesToDownload, models.Downloadable{
 				Url:        v.Downloads.Raw.Url,
 				Path:       file,
 				Sha1:       v.Downloads.Raw.Hash,

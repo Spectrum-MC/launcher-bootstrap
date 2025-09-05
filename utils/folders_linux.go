@@ -18,14 +18,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package main
+package utils
 
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/spectrum-mc/bootstrap/models"
 )
 
-func GetLauncherDirectory(s *BootstrapSettings) (string, error) {
+func GetLauncherDirectory(s *models.BootstrapSettings) (string, error) {
 	lp := s.LauncherPath
 	if len(lp) == 0 {
 		homedir, err := os.UserHomeDir()

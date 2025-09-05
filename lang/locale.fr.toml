@@ -1,4 +1,4 @@
-failed_load_bs_settings = "Echec du chargement des paramètres Bootstrap: {{.Err}}"
+failed_load_bs_settings = "Échec du chargement des paramètres Bootstrap: {{.Err}}"
 failed_init = "Échec de l'initialisation: {{.Err}}"
 fetching_launcher_updates = "Récupération des mise à jour launcher..."
 update_button = "Mettre à jour!"

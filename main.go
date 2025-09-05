@@ -19,7 +19,7 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -34,56 +34,48 @@ import (
 	"strings"
 	"time"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	"github.com/spectrum-mc/bootstrap/localize"
+	"github.com/spectrum-mc/bootstrap/models"
+	"github.com/spectrum-mc/bootstrap/runtime_manager"
+	"github.com/spectrum-mc/bootstrap/ui"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
 
 //go:embed bs_settings.json
 var BOOTSTRAP_SETTINGS_STR []byte
 
-var basepath *string
+//go:embed lang/locale.*.toml
+var LocalesFS embed.FS
 
-var BOOTSTRAP_VERSION = "1"
+var basepath *string
 
 func init() {
 	basepath = flag.String("path", "", "The path to store launcher data (i.e. portable-mode)")
 }
 
 func main() {
-	bsVersion, err := strconv.Atoi(BOOTSTRAP_VERSION)
+	localize.LoadTranslations(LocalesFS)
+
+	bsVersion, err := strconv.Atoi(utils.BOOTSTRAP_VERSION)
 	if err != nil {
 		fmt.Println("Failed to parse bootstrap version to an int!")
-		fmt.Println("Version found: ", BOOTSTRAP_VERSION)
+		fmt.Println("Version found: ", utils.BOOTSTRAP_VERSION)
 
 		panic(err)
 	}
 
 	flag.Parse()
 
-	app := app.New()
-	window := app.NewWindow("SpectrumBootstrap")
-	window.SetFixedSize(true)
+	mainUi := ui.New()
 
 	go func() {
-		window.SetContent(
-			container.NewVBox(
-				widget.NewLabel(Localize("fetching_launcher_updates", nil)),
-			),
-		)
-		window.CenterOnScreen()
+		mainUi.ShowInfo("fetching_launcher_updates", nil)
 
-		settings := BootstrapSettings{}
+		settings := models.BootstrapSettings{}
 		err := json.Unmarshal(BOOTSTRAP_SETTINGS_STR, &settings)
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_load_bs_settings", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		if mainUi.ShowError("failed_load_bs_settings", err) {
 			return
 		}
 
@@ -91,65 +83,30 @@ func main() {
 			settings.LauncherPath = *basepath
 		}
 
-		settings.LauncherPath, err = GetLauncherDirectory(&settings)
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_init", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		settings.LauncherPath, err = utils.GetLauncherDirectory(&settings)
+		if mainUi.ShowError("failed_init", err) {
 			return
 		}
 
-		window.SetTitle(settings.Brand + " - Bootstrap")
+		mainUi.SetTitle(settings.Brand)
 
-		launcherManager, err := GetLauncherManager(&settings)
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_init", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		launcherManager, err := runtime_manager.GetLauncherManager(&settings)
+		if mainUi.ShowError("failed_init", err) {
 			return
 		}
 
-		jvmManager, err := GetJvmManager(&settings, launcherManager.launcherManifest.Java)
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_init", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		jvmManager, err := runtime_manager.GetJvmManager(&settings, launcherManager.LauncherManifest.Java)
+		if mainUi.ShowError("failed_init", err) {
 			return
 		}
 
 		jvmFilesToDownload, err := jvmManager.ValidateInstallation()
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_init", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		if mainUi.ShowError("failed_init", err) {
 			return
 		}
 
 		launcherFilesToDownload, err := launcherManager.ValidateInstallation()
-		if err != nil {
-			window.SetContent(
-				container.NewVBox(
-					widget.NewLabel(Localize("failed_init", map[string]string{"Err": err.Error()})),
-				),
-			)
-			window.CenterOnScreen()
-
+		if mainUi.ShowError("failed_init", err) {
 			return
 		}
 
@@ -163,40 +120,33 @@ func main() {
 		filenameLabel := widget.NewLabel("-")
 		fileProgressBar := widget.NewProgressBar()
 
-		window.SetContent(container.NewVBox(
-			widget.NewLabel(Localize("downloading", nil)),
+		mainUi.SetContent(
+			widget.NewLabel(localize.Localize("downloading", nil)),
 			container.NewHBox(
-				widget.NewLabel(Localize("elapsed_time", nil)),
+				widget.NewLabel(localize.Localize("elapsed_time", nil)),
 				timeLabel,
 			),
 			mainProgressBar,
 			filenameLabel,
 			fileProgressBar,
-		))
+		)
 
 		start := time.Now()
 		amtFiles := len(filesToDownload)
 		processedFiles := 0
 		for _, f := range filesToDownload {
 			err := os.MkdirAll(filepath.Dir(f.Path), os.ModePerm)
-			if err != nil {
-				window.SetContent(
-					container.NewVBox(
-						widget.NewLabel(Localize("fail_download", map[string]string{"Err": err.Error()})),
-					),
-				)
-				window.CenterOnScreen()
-
+			if mainUi.ShowFailedDownloadError(err) {
 				return
 			}
 
 			out, err := os.Create(f.Path)
-			if ShowError(window, "fail_download", err) {
+			if mainUi.ShowFailedDownloadError(err) {
 				return
 			}
 
 			done := make(chan int64)
-			go func(f Downloadable) {
+			go func(f models.Downloadable) {
 				var stop bool = false
 
 				for {
@@ -243,24 +193,24 @@ func main() {
 			}
 			filenameLabel.SetText(dlFilePath)
 
-			window.CenterOnScreen()
+			mainUi.CenterOnScreen()
 
 			// @TODO: 3 Retries per file
 			req, err := http.NewRequest("GET", f.Url, nil)
-			if ShowError(window, "fail_download", err) {
+			if mainUi.ShowFailedDownloadError(err) {
 				return
 			}
 
-			req.Header.Set("User-Agent", "SpectrumBootstrap/"+BOOTSTRAP_VERSION)
+			utils.SetUserAgent(&settings, req)
 
 			resp, err := http.DefaultClient.Do(req)
-			if ShowError(window, "fail_download", err) {
+			if mainUi.ShowFailedDownloadError(err) {
 				return
 			}
 			defer resp.Body.Close()
 
 			n, err := io.Copy(out, resp.Body)
-			if ShowError(window, "fail_download", err) {
+			if mainUi.ShowFailedDownloadError(err) {
 				return
 			}
 
@@ -268,7 +218,7 @@ func main() {
 
 			if f.Executable {
 				err := os.Chmod(f.Path, os.ModePerm)
-				if ShowError(window, "fail_download", err) {
+				if mainUi.ShowFailedDownloadError(err) {
 					return
 				}
 			}
@@ -283,27 +233,28 @@ func main() {
 		// @TODO: Handle other than java
 		executablePath := ""
 		classpathSeparator := ":"
-		if runtime.GOOS == "darwin" {
+		switch runtime.GOOS {
+		case "darwin":
 			executablePath = "jre.bundle/Contents/Home/bin/java"
-		} else if runtime.GOOS == "linux" {
+		case "linux":
 			executablePath = "bin/java"
-		} else if runtime.GOOS == "windows" {
+		case "windows":
 			executablePath = "bin/javaw.exe"
 			classpathSeparator = ";"
-		} else {
+		default:
 			// I don't currently handle BSD/Solaris/whatever people try to use it on
 			panic("How did we get here?")
 		}
 
 		classpath := []string{}
-		for _, f := range launcherManager.launcherManifest.Files {
+		for _, f := range launcherManager.LauncherManifest.Files {
 			if f.Type == "classpath" {
 				classpath = append(classpath, filepath.Join(settings.LauncherPath, "launcher", f.Path))
 			}
 		}
 
 		variables := map[string]any{
-			"osArch":     jvmManager.os,
+			"osArch":     jvmManager.Os,
 			"rootPath":   settings.LauncherPath,
 			"bsVersion":  bsVersion,
 			"isPortable": len(*basepath) > 0,
@@ -312,10 +263,10 @@ func main() {
 		cmdStrArr := []string{
 			"-classpath",
 			strings.Join(classpath, classpathSeparator),
-			launcherManager.launcherManifest.MainClass,
+			launcherManager.LauncherManifest.MainClass,
 		}
 
-		for _, arg := range launcherManager.launcherManifest.Args {
+		for _, arg := range launcherManager.LauncherManifest.Args {
 			val := arg
 
 			for k, v := range variables {
@@ -340,8 +291,10 @@ func main() {
 			os.Exit(1)
 		}
 
-		window.Hide()
+		mainUi.Hide()
 
+		// @TODO: If it fails it should show a GUI message instead of this
+		// A new window
 		if err = cmd.Wait(); err != nil {
 			fmt.Println("Failed to run the launcher:")
 			fmt.Println(err)
@@ -351,21 +304,5 @@ func main() {
 		os.Exit(0)
 	}()
 
-	window.ShowAndRun()
-}
-
-func ShowError(w fyne.Window, translation string, err error) bool {
-	if err != nil {
-		w.SetContent(
-			container.NewVBox(
-				widget.NewLabel(Localize(translation, nil)),
-				widget.NewLabel(err.Error()),
-			),
-		)
-		w.CenterOnScreen()
-
-		return true
-	}
-
-	return false
+	mainUi.Start()
 }
