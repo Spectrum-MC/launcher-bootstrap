@@ -32,16 +32,20 @@ type MainUi struct {
 }
 
 func (ui *MainUi) CenterOnScreen() {
-	ui.MainWindow.CenterOnScreen()
+	fyne.Do(func() {
+		ui.MainWindow.CenterOnScreen()
+	})
 }
 
 func (ui *MainUi) SetContent(content ...fyne.CanvasObject) {
-	ui.MainWindow.SetContent(container.NewVBox(content...))
+	fyne.Do(func() {
+		ui.MainWindow.SetContent(container.NewVBox(content...))
+	})
 }
 
 func (ui *MainUi) showWidgets(widgets ...fyne.CanvasObject) {
 	ui.SetContent(widgets...)
-	ui.MainWindow.CenterOnScreen()
+	ui.CenterOnScreen()
 }
 
 func (ui *MainUi) ShowInfo(localizeKey string, data map[string]string) {
@@ -72,15 +76,21 @@ func (ui *MainUi) ShowFailedDownloadError(err error) bool {
 }
 
 func (ui *MainUi) SetTitle(title string) {
-	ui.MainWindow.SetTitle(title + " - Bootstrap")
+	fyne.Do(func() {
+		ui.MainWindow.SetTitle(title + " - Bootstrap")
+	})
 }
 
 func (ui *MainUi) Show() {
-	ui.MainWindow.Show()
+	fyne.Do(func() {
+		ui.MainWindow.Show()
+	})
 }
 
 func (ui *MainUi) Hide() {
-	ui.MainWindow.Hide()
+	fyne.Do(func() {
+		ui.MainWindow.Hide()
+	})
 }
 
 func (ui *MainUi) Start() {

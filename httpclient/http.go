@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package utils
+package httpclient
 
 import (
 	"encoding/json"
@@ -27,9 +27,8 @@ import (
 	"runtime"
 
 	"github.com/spectrum-mc/bootstrap/models"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
-
-var BOOTSTRAP_VERSION = "2"
 
 func GetOrCached[T interface{}](bs *models.BootstrapSettings, cachePath, url string) (*T, error) {
 	cached, cachedErr := LoadFromCache[T](cachePath)
@@ -91,7 +90,7 @@ func LoadFromCache[T interface{}](filepath string) (*T, error) {
 	return manifest, nil
 }
 
-func DoGetRequest[T interface{}](bs *models.BootstrapSettings, url string) (*T, error) {
+func DoGetRequest[T any](bs *models.BootstrapSettings, url string) (*T, error) {
 	client := &http.Client{}
 
 	req, err := http.NewRequest(
@@ -123,6 +122,6 @@ func DoGetRequest[T interface{}](bs *models.BootstrapSettings, url string) (*T, 
 func SetUserAgent(bs *models.BootstrapSettings, req *http.Request) {
 	req.Header.Set(
 		"User-Agent",
-		bs.Brand+" (SpectrumBootstrap v"+BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
+		bs.Brand+" (SpectrumBootstrap v"+utils.BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
 	)
 }

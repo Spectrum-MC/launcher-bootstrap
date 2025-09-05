@@ -23,19 +23,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
-	"time"
 
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
+	"github.com/spectrum-mc/bootstrap/httpclient"
 	"github.com/spectrum-mc/bootstrap/localize"
 	"github.com/spectrum-mc/bootstrap/models"
 	"github.com/spectrum-mc/bootstrap/runtime_manager"
@@ -58,6 +49,62 @@ func init() {
 func main() {
 	localize.LoadTranslations(LocalesFS)
 
+	flag.Parse()
+
+	mainUi := ui.New()
+
+	mainUi.App.Lifecycle().SetOnStarted(func() {
+		go func() {
+
+			mainUi.ShowInfo("fetching_launcher_updates", nil)
+
+			settings := initializeBootstrap(mainUi)
+			if settings == nil {
+				os.Exit(1)
+
+				return
+			}
+
+			launcherManager, err := runtime_manager.GetLauncherManager(settings)
+			if mainUi.ShowError("failed_init", err) {
+				return
+			}
+
+			runtimeManager, filesToDownload, err := runtime_manager.BuildRequiredFileDownloadList(settings, launcherManager)
+			if mainUi.ShowError("failed_init", err) {
+				return
+			}
+
+			dm := httpclient.NewDownloadManager(settings, mainUi)
+			dm.SetOnComplete(func() {
+				err = runLauncher(runtimeManager, launcherManager, settings, mainUi)
+				if err != nil {
+					// @TODO: If it fails it should show a GUI message instead of this
+					// A new window
+					fmt.Println("Failed to run the launcher:")
+					fmt.Println(err)
+					os.Exit(1)
+				}
+
+				os.Exit(0)
+			})
+
+			go func() {
+				dm.Download(filesToDownload)
+			}()
+		}()
+	})
+
+	mainUi.Start()
+}
+
+func initializeBootstrap(mainUi *ui.MainUi) *models.BootstrapSettings {
+	settings := models.BootstrapSettings{}
+	err := json.Unmarshal(BOOTSTRAP_SETTINGS_STR, &settings)
+	if mainUi.ShowError("failed_load_bs_settings", err) {
+		return nil
+	}
+
 	bsVersion, err := strconv.Atoi(utils.BOOTSTRAP_VERSION)
 	if err != nil {
 		fmt.Println("Failed to parse bootstrap version to an int!")
@@ -66,243 +113,41 @@ func main() {
 		panic(err)
 	}
 
-	flag.Parse()
+	settings.BootstrapVersion = bsVersion
+	settings.Portable = false
 
-	mainUi := ui.New()
+	if len(*basepath) > 0 {
+		settings.LauncherPath = *basepath
+		settings.Portable = true
+	}
 
-	go func() {
-		mainUi.ShowInfo("fetching_launcher_updates", nil)
+	settings.LauncherPath, err = utils.GetLauncherDirectory(&settings)
+	if mainUi.ShowError("failed_init", err) {
+		return nil
+	}
 
-		settings := models.BootstrapSettings{}
-		err := json.Unmarshal(BOOTSTRAP_SETTINGS_STR, &settings)
-		if mainUi.ShowError("failed_load_bs_settings", err) {
-			return
-		}
+	mainUi.SetTitle(settings.Brand)
 
-		if len(*basepath) > 0 {
-			settings.LauncherPath = *basepath
-		}
+	return &settings
+}
 
-		settings.LauncherPath, err = utils.GetLauncherDirectory(&settings)
-		if mainUi.ShowError("failed_init", err) {
-			return
-		}
+func runLauncher(
+	runtimeManager runtime_manager.Manager,
+	launcherManager *runtime_manager.LauncherManager,
+	settings *models.BootstrapSettings,
+	mainUi *ui.MainUi,
+) error {
+	cmd, err := runtimeManager.GetCommand(launcherManager)
 
-		mainUi.SetTitle(settings.Brand)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Dir = settings.LauncherPath
 
-		launcherManager, err := runtime_manager.GetLauncherManager(&settings)
-		if mainUi.ShowError("failed_init", err) {
-			return
-		}
+	if err = cmd.Start(); err != nil {
+		return err
+	}
 
-		jvmManager, err := runtime_manager.GetJvmManager(&settings, launcherManager.LauncherManifest.Java)
-		if mainUi.ShowError("failed_init", err) {
-			return
-		}
+	mainUi.Hide()
 
-		jvmFilesToDownload, err := jvmManager.ValidateInstallation()
-		if mainUi.ShowError("failed_init", err) {
-			return
-		}
-
-		launcherFilesToDownload, err := launcherManager.ValidateInstallation()
-		if mainUi.ShowError("failed_init", err) {
-			return
-		}
-
-		filesToDownload := append(jvmFilesToDownload, launcherFilesToDownload...)
-
-		timeLabel := widget.NewLabel("00:00:00")
-		mainProgressBar := widget.NewProgressBar()
-
-		// @TODO Make this base on goroutine to download multiple file at once
-		// @TODO which will be hard to display properly like SKCraft
-		filenameLabel := widget.NewLabel("-")
-		fileProgressBar := widget.NewProgressBar()
-
-		mainUi.SetContent(
-			widget.NewLabel(localize.Localize("downloading", nil)),
-			container.NewHBox(
-				widget.NewLabel(localize.Localize("elapsed_time", nil)),
-				timeLabel,
-			),
-			mainProgressBar,
-			filenameLabel,
-			fileProgressBar,
-		)
-
-		start := time.Now()
-		amtFiles := len(filesToDownload)
-		processedFiles := 0
-		for _, f := range filesToDownload {
-			err := os.MkdirAll(filepath.Dir(f.Path), os.ModePerm)
-			if mainUi.ShowFailedDownloadError(err) {
-				return
-			}
-
-			out, err := os.Create(f.Path)
-			if mainUi.ShowFailedDownloadError(err) {
-				return
-			}
-
-			done := make(chan int64)
-			go func(f models.Downloadable) {
-				var stop bool = false
-
-				for {
-					select {
-					case <-done:
-						stop = true
-					default:
-						fi, err := os.Stat(f.Path)
-						if err != nil {
-							log.Fatal(err)
-						}
-
-						currSize := fi.Size()
-						if currSize == 0 {
-							currSize = 1
-						}
-
-						fileProgressBar.SetValue(float64(currSize) / float64(f.Size))
-
-						duration := time.Since(start).Round(time.Second)
-						hours := duration / time.Hour
-						duration -= hours * time.Hour
-						minutes := duration / time.Minute
-						duration -= minutes * time.Minute
-						seconds := duration / time.Second
-
-						timeLabel.SetText(fmt.Sprintf("%02d:%02d:%02d (%v/%v)", hours, minutes, seconds, processedFiles, amtFiles))
-					}
-
-					if stop {
-						break
-					}
-
-					time.Sleep(time.Second)
-				}
-			}(f)
-
-			dlFilePath := strings.TrimPrefix(
-				f.Path,
-				settings.LauncherPath,
-			)
-			if len(dlFilePath) > 20 {
-				dlFilePath = "..." + dlFilePath[len(dlFilePath)-20:]
-			}
-			filenameLabel.SetText(dlFilePath)
-
-			mainUi.CenterOnScreen()
-
-			// @TODO: 3 Retries per file
-			req, err := http.NewRequest("GET", f.Url, nil)
-			if mainUi.ShowFailedDownloadError(err) {
-				return
-			}
-
-			utils.SetUserAgent(&settings, req)
-
-			resp, err := http.DefaultClient.Do(req)
-			if mainUi.ShowFailedDownloadError(err) {
-				return
-			}
-			defer resp.Body.Close()
-
-			n, err := io.Copy(out, resp.Body)
-			if mainUi.ShowFailedDownloadError(err) {
-				return
-			}
-
-			out.Close()
-
-			if f.Executable {
-				err := os.Chmod(f.Path, os.ModePerm)
-				if mainUi.ShowFailedDownloadError(err) {
-					return
-				}
-			}
-
-			done <- n
-
-			processedFiles += 1
-			mainProgressBar.SetValue(float64(processedFiles) / float64(len(filesToDownload)))
-		}
-
-		// Launching the launcher
-		// @TODO: Handle other than java
-		executablePath := ""
-		classpathSeparator := ":"
-		switch runtime.GOOS {
-		case "darwin":
-			executablePath = "jre.bundle/Contents/Home/bin/java"
-		case "linux":
-			executablePath = "bin/java"
-		case "windows":
-			executablePath = "bin/javaw.exe"
-			classpathSeparator = ";"
-		default:
-			// I don't currently handle BSD/Solaris/whatever people try to use it on
-			panic("How did we get here?")
-		}
-
-		classpath := []string{}
-		for _, f := range launcherManager.LauncherManifest.Files {
-			if f.Type == "classpath" {
-				classpath = append(classpath, filepath.Join(settings.LauncherPath, "launcher", f.Path))
-			}
-		}
-
-		variables := map[string]any{
-			"osArch":     jvmManager.Os,
-			"rootPath":   settings.LauncherPath,
-			"bsVersion":  bsVersion,
-			"isPortable": len(*basepath) > 0,
-		}
-
-		cmdStrArr := []string{
-			"-classpath",
-			strings.Join(classpath, classpathSeparator),
-			launcherManager.LauncherManifest.MainClass,
-		}
-
-		for _, arg := range launcherManager.LauncherManifest.Args {
-			val := arg
-
-			for k, v := range variables {
-				val = strings.ReplaceAll(val, "${"+k+"}", fmt.Sprintf("%v", v))
-			}
-
-			cmdStrArr = append(cmdStrArr, val)
-		}
-
-		cmd := exec.Command(
-			filepath.Join(jvmManager.GetPath(), executablePath),
-			cmdStrArr...,
-		)
-
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stdout
-		cmd.Dir = settings.LauncherPath
-
-		if err = cmd.Start(); err != nil {
-			fmt.Println("Failed to run the launcher:")
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		mainUi.Hide()
-
-		// @TODO: If it fails it should show a GUI message instead of this
-		// A new window
-		if err = cmd.Wait(); err != nil {
-			fmt.Println("Failed to run the launcher:")
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		os.Exit(0)
-	}()
-
-	mainUi.Start()
+	return cmd.Wait()
 }

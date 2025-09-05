@@ -19,6 +19,9 @@
 package models
 
 type BootstrapSettings struct {
+	BootstrapVersion int  `json:"-"`
+	Portable         bool `json:"-"`
+
 	ManifestURL string `json:"launcher_manifest"`
 	Brand       string `json:"launcher_brand"`
 	FolderName  string `json:"launcher_foldername"`

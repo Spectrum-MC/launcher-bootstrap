@@ -19,13 +19,16 @@
 package runtime_manager
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
 
+	"github.com/spectrum-mc/bootstrap/httpclient"
 	"github.com/spectrum-mc/bootstrap/models"
 	"github.com/spectrum-mc/bootstrap/utils"
 )
@@ -41,7 +44,7 @@ func GetLauncherManager(bs *models.BootstrapSettings) (*LauncherManager, error) 
 	}
 
 	// We load the main manifest
-	mainManifest, err := utils.GetOrCached[models.LauncherManifest](
+	mainManifest, err := httpclient.GetOrCached[models.LauncherManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "launcher_manifest.json"),
 		bs.ManifestURL,
@@ -124,4 +127,8 @@ func (m *LauncherManager) ValidateInstallation() ([]models.Downloadable, error) 
 	})
 
 	return filesToDownload, err
+}
+
+func (m *LauncherManager) GetCommand(launcherManager *LauncherManager) (*exec.Cmd, error) {
+	return nil, errors.New("you should not call GetCommand on the launcher manager, use the runtime manager instead")
 }

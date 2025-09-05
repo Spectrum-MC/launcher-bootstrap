@@ -23,11 +23,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 
+	"github.com/spectrum-mc/bootstrap/httpclient"
 	"github.com/spectrum-mc/bootstrap/models"
 	"github.com/spectrum-mc/bootstrap/utils"
 )
@@ -91,7 +94,7 @@ func GetJvmManager(bs *models.BootstrapSettings, launcherManifest models.Launche
 	}
 
 	// We load the main manifest
-	mainManifest, err := utils.GetOrCached[models.MainJavaManifest](
+	mainManifest, err := httpclient.GetOrCached[models.MainJavaManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "main_java_manifest.json"),
 		launcherManifest.ManifestURL,
@@ -112,7 +115,7 @@ func GetJvmManager(bs *models.BootstrapSettings, launcherManifest models.Launche
 	if !ok {
 		return nil, ErrNoJavaVersionForOs
 	}
-	versionManifest, err := utils.GetOrCached[models.JavaManifest](
+	versionManifest, err := httpclient.GetOrCached[models.JavaManifest](
 		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "java_"+os+"_"+launcherManifest.Component+".json"),
 		version[0].Manifest.Url, // @TODO: Check how versions are handled, should we DL the first or the last?
@@ -196,4 +199,56 @@ func (m *JvmManager) ValidateInstallation() ([]models.Downloadable, error) {
 	})
 
 	return filesToDownload, err
+}
+
+func (m *JvmManager) GetCommand(launcherManager *LauncherManager) (*exec.Cmd, error) {
+	executablePath := ""
+	classpathSeparator := ":"
+	switch runtime.GOOS {
+	case "darwin":
+		executablePath = "jre.bundle/Contents/Home/bin/java"
+	case "linux":
+		executablePath = "bin/java"
+	case "windows":
+		executablePath = "bin/javaw.exe"
+		classpathSeparator = ";"
+	default:
+		// I don't currently handle BSD/Solaris/whatever people try to use it on
+		panic("How did we get here?")
+	}
+
+	classpath := []string{}
+	for _, f := range launcherManager.LauncherManifest.Files {
+		if f.Type == "classpath" {
+			classpath = append(classpath, filepath.Join(launcherManager.bSettings.LauncherPath, "launcher", f.Path))
+		}
+	}
+
+	variables := map[string]any{
+		"osArch":     m.Os,
+		"rootPath":   launcherManager.bSettings.LauncherPath,
+		"bsVersion":  launcherManager.bSettings.BootstrapVersion,
+		"isPortable": launcherManager.bSettings.Portable,
+	}
+
+	cmdStrArr := []string{
+		"-classpath",
+		strings.Join(classpath, classpathSeparator),
+		launcherManager.LauncherManifest.MainClass,
+	}
+
+	for _, arg := range launcherManager.LauncherManifest.Args {
+		val := arg
+
+		for k, v := range variables {
+			val = strings.ReplaceAll(val, "${"+k+"}", fmt.Sprintf("%v", v))
+		}
+
+		cmdStrArr = append(cmdStrArr, val)
+	}
+
+	return exec.Command(
+		filepath.Join(m.GetPath(), executablePath),
+		cmdStrArr...,
+	), nil
 }
