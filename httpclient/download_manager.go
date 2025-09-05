@@ -35,8 +35,63 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 
 	// @TODO Make this base on goroutine to download multiple file at once
 	// @TODO which will be hard to display properly like SKCraft
-	filenameLabel := widget.NewLabel("-")
-	fileProgressBar := widget.NewProgressBar()
+
+	filesToDownloadCopy := make([]models.Downloadable, len(filesToDownload))
+	copy(filesToDownloadCopy, filesToDownload)
+
+	size := fyne.NewSize(300, 200)
+	if len(filesToDownload) > 0 {
+		size = fyne.NewSize(750, 500)
+	}
+
+	fyne.Do(func() {
+		dm.ui.MainWindow.Resize(size)
+	})
+	dm.ui.CenterOnScreen()
+
+	progressBars := make([]*widget.ProgressBar, len(filesToDownloadCopy))
+
+	table := widget.NewTable(
+		func() (int, int) {
+			return len(filesToDownloadCopy), 2
+		},
+		func() fyne.CanvasObject {
+			return container.NewStack(widget.NewLabel(""), widget.NewProgressBar())
+		},
+		func(id widget.TableCellID, obj fyne.CanvasObject) {
+			stack := obj.(*fyne.Container)
+			label := stack.Objects[0].(*widget.Label)
+			pbar := stack.Objects[1].(*widget.ProgressBar)
+
+			// Fyne is a joke
+			// Apparently this is the recommended way to do it
+			// https://stackoverflow.com/questions/73571674/how-to-make-a-table-with-different-object-types-in-fyne-io
+			if id.Col == 0 {
+				label.Show()
+				pbar.Hide()
+				label.Truncation = fyne.TextTruncateEllipsis
+				label.Wrapping = fyne.TextWrapOff
+				file := filesToDownloadCopy[id.Row]
+				filepath := strings.TrimPrefix(file.Path, dm.settings.LauncherPath)
+				fyne.Do(func() {
+					label.SetText(filepath)
+				})
+			} else {
+				label.Hide()
+				pbar.Show()
+				progressBars[id.Row] = pbar
+				fyne.Do(func() {
+					pbar.SetValue(progressBars[id.Row].Value)
+				})
+			}
+		},
+	)
+
+	table.SetColumnWidth(0, 500)
+	table.SetColumnWidth(1, 200)
+
+	vscroll := container.NewVScroll(table)
+	vscroll.SetMinSize(fyne.NewSize(400, 400))
 
 	dm.ui.SetContent(
 		widget.NewLabel(localize.Localize("downloading", nil)),
@@ -45,14 +100,14 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 			timeLabel,
 		),
 		mainProgressBar,
-		filenameLabel,
-		fileProgressBar,
+		vscroll,
 	)
 
 	start := time.Now()
 	amtFiles := len(filesToDownload)
 	processedFiles := 0
-	for _, f := range filesToDownload {
+	for i := 0; i < len(filesToDownloadCopy); {
+		f := filesToDownloadCopy[i]
 		err := os.MkdirAll(filepath.Dir(f.Path), os.ModePerm)
 		if dm.ui.ShowFailedDownloadError(err) {
 			return
@@ -64,9 +119,8 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 		}
 
 		done := make(chan int64)
-		go func(f models.Downloadable) {
+		go func(idx int, f models.Downloadable) {
 			var stop bool = false
-
 			for {
 				select {
 				case <-done:
@@ -76,16 +130,13 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 					if err != nil {
 						log.Fatal(err)
 					}
-
 					currSize := fi.Size()
 					if currSize == 0 {
 						currSize = 1
 					}
-
 					fyne.Do(func() {
-						fileProgressBar.SetValue(float64(currSize) / float64(f.Size))
+						progressBars[idx].SetValue(float64(currSize) / float64(f.Size))
 					})
-
 					fyne.Do(func() {
 						timeLabel.SetText(
 							fmt.Sprintf(
@@ -97,25 +148,12 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 						)
 					})
 				}
-
 				if stop {
 					break
 				}
-
 				time.Sleep(200 * time.Millisecond)
 			}
-		}(f)
-
-		dlFilePath := strings.TrimPrefix(
-			f.Path,
-			dm.settings.LauncherPath,
-		)
-		if len(dlFilePath) > 20 {
-			dlFilePath = "..." + dlFilePath[len(dlFilePath)-20:]
-		}
-		fyne.Do(func() {
-			filenameLabel.SetText(dlFilePath)
-		})
+		}(i, f)
 
 		dm.ui.CenterOnScreen()
 
@@ -152,6 +190,11 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 		processedFiles += 1
 		fyne.Do(func() {
 			mainProgressBar.SetValue(float64(processedFiles) / float64(len(filesToDownload)))
+		})
+
+		filesToDownloadCopy = append(filesToDownloadCopy[:i], filesToDownloadCopy[i+1:]...)
+		fyne.Do(func() {
+			table.Refresh()
 		})
 	}
 
