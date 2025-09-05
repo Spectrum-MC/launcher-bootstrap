@@ -16,6 +16,7 @@ import (
 	"github.com/spectrum-mc/bootstrap/localize"
 	"github.com/spectrum-mc/bootstrap/models"
 	"github.com/spectrum-mc/bootstrap/ui"
+	"github.com/spectrum-mc/bootstrap/utils"
 )
 
 type DownloadManager struct {
@@ -85,15 +86,15 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 						fileProgressBar.SetValue(float64(currSize) / float64(f.Size))
 					})
 
-					duration := time.Since(start).Round(time.Second)
-					hours := duration / time.Hour
-					duration -= hours * time.Hour
-					minutes := duration / time.Minute
-					duration -= minutes * time.Minute
-					seconds := duration / time.Second
-
 					fyne.Do(func() {
-						timeLabel.SetText(fmt.Sprintf("%02d:%02d:%02d (%v/%v)", hours, minutes, seconds, processedFiles, amtFiles))
+						timeLabel.SetText(
+							fmt.Sprintf(
+								"%v (%v/%v)",
+								utils.FormatDuration(time.Since(start)),
+								processedFiles,
+								amtFiles,
+							),
+						)
 					})
 				}
 
@@ -101,7 +102,7 @@ func (dm *DownloadManager) Download(filesToDownload []models.Downloadable) {
 					break
 				}
 
-				time.Sleep(time.Second)
+				time.Sleep(200 * time.Millisecond)
 			}
 		}(f)
 
