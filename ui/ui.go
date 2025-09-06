@@ -97,6 +97,13 @@ func (ui *MainUi) Start() {
 	ui.MainWindow.ShowAndRun()
 }
 
+func (ui *MainUi) Resize(size fyne.Size) {
+	fyne.Do(func() {
+		ui.MainWindow.Resize(size)
+		ui.MainWindow.CenterOnScreen()
+	})
+}
+
 func New() *MainUi {
 	app := app.New()
 
