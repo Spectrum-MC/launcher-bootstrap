@@ -95,7 +95,6 @@ func GetJvmManager(bs *models.BootstrapSettings, launcherManifest models.Launche
 
 	// We load the main manifest
 	mainManifest, err := httpclient.GetOrCached[models.MainJavaManifest](
-		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "main_java_manifest.json"),
 		launcherManifest.ManifestURL,
 	)
@@ -116,7 +115,6 @@ func GetJvmManager(bs *models.BootstrapSettings, launcherManifest models.Launche
 		return nil, ErrNoJavaVersionForOs
 	}
 	versionManifest, err := httpclient.GetOrCached[models.JavaManifest](
-		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "java_"+os+"_"+launcherManifest.Component+".json"),
 		version[0].Manifest.Url, // @TODO: Check how versions are handled, should we DL the first or the last?
 	)

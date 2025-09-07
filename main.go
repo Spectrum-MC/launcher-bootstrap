@@ -55,7 +55,6 @@ func main() {
 
 	mainUi.App.Lifecycle().SetOnStarted(func() {
 		go func() {
-
 			mainUi.ShowInfo("fetching_launcher_updates", nil)
 
 			settings := initializeBootstrap(mainUi)
@@ -75,7 +74,7 @@ func main() {
 				return
 			}
 
-			dm := httpclient.NewDownloadManager(settings, mainUi)
+			dm := httpclient.NewDownloadManager(mainUi)
 			dm.SetOnComplete(func() {
 				err = runLauncher(runtimeManager, launcherManager, settings, mainUi)
 				if err != nil {
@@ -104,6 +103,8 @@ func initializeBootstrap(mainUi *ui.MainUi) *models.BootstrapSettings {
 	if mainUi.ShowError("failed_load_bs_settings", err) {
 		return nil
 	}
+
+	httpclient.BOOTSTRAP_SETTINGS = &settings
 
 	bsVersion, err := strconv.Atoi(utils.BOOTSTRAP_VERSION)
 	if err != nil {

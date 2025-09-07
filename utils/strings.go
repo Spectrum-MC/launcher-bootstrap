@@ -16,16 +16,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-package runtime_manager
+package utils
 
 import (
-	"os/exec"
-
-	"github.com/spectrum-mc/bootstrap/models"
+	"fmt"
+	"time"
 )
 
-type Manager interface {
-	GetPath() string
-	ValidateInstallation() ([]models.Downloadable, error)
-	GetCommand(launcherManager *LauncherManager) (*exec.Cmd, error)
+func FormatDuration(d time.Duration) string {
+	duration := d.Round(time.Second)
+	hours := duration / time.Hour
+	duration -= hours * time.Hour
+	minutes := duration / time.Minute
+	duration -= minutes * time.Minute
+	seconds := duration / time.Second
+
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }

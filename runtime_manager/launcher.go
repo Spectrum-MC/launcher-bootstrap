@@ -45,7 +45,6 @@ func GetLauncherManager(bs *models.BootstrapSettings) (*LauncherManager, error) 
 
 	// We load the main manifest
 	mainManifest, err := httpclient.GetOrCached[models.LauncherManifest](
-		bs,
 		filepath.Join(bs.LauncherPath, ".cache", "launcher_manifest.json"),
 		bs.ManifestURL,
 	)

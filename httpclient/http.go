@@ -21,6 +21,7 @@ package httpclient
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,7 +31,9 @@ import (
 	"github.com/spectrum-mc/bootstrap/utils"
 )
 
-func GetOrCached[T interface{}](bs *models.BootstrapSettings, cachePath, url string) (*T, error) {
+var BOOTSTRAP_SETTINGS *models.BootstrapSettings
+
+func GetOrCached[T any](cachePath, url string) (*T, error) {
 	cached, cachedErr := LoadFromCache[T](cachePath)
 	// There is no error for file not found or file corrupted
 	// So if we have an error here, there is a deeper issue and we need to raise
@@ -38,7 +41,7 @@ func GetOrCached[T interface{}](bs *models.BootstrapSettings, cachePath, url str
 		return nil, cachedErr
 	}
 
-	live, liveErr := DoGetRequest[T](bs, url)
+	live, liveErr := DoGetRequest[T](url)
 	// If we can't get it but the cache is loaded, no issue
 	// If we can't get it and no cache: CRASH
 	if liveErr != nil && cached != nil {
@@ -90,10 +93,10 @@ func LoadFromCache[T interface{}](filepath string) (*T, error) {
 	return manifest, nil
 }
 
-func DoGetRequest[T any](bs *models.BootstrapSettings, url string) (*T, error) {
+func DoGetRequest[T any](url string) (*T, error) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest(
+	req, err := NewRequest(
 		"GET",
 		url,
 		nil,
@@ -102,8 +105,6 @@ func DoGetRequest[T any](bs *models.BootstrapSettings, url string) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	SetUserAgent(bs, req)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -119,9 +120,20 @@ func DoGetRequest[T any](bs *models.BootstrapSettings, url string) (*T, error) {
 	return manifest, nil
 }
 
-func SetUserAgent(bs *models.BootstrapSettings, req *http.Request) {
+func SetUserAgent(req *http.Request) {
 	req.Header.Set(
 		"User-Agent",
-		bs.Brand+" (SpectrumBootstrap v"+utils.BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
+		BOOTSTRAP_SETTINGS.Brand+" (SpectrumBootstrap v"+utils.BOOTSTRAP_VERSION+", "+runtime.GOOS+", "+runtime.GOARCH+")",
 	)
+}
+
+func NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	SetUserAgent(req)
+
+	return req, nil
 }
